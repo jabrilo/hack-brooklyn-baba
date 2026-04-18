@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from schemas import ClaimRequest, ClaimResponse
+
+from services.pubmed import get_abstracts_for_claim
+
 app = FastAPI()
 
 app.add_middleware(
@@ -10,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-@app.get("/")
-def home():
-    return {"message": "Welcome to the BABA API"}
+@app.post("/", response_model=ClaimResponse)
+async def get_claim_abstracts(claim_request: ClaimRequest):
+    response = ClaimResponse(result=get_abstracts_for_claim(claim_request.claim))
+    return response
