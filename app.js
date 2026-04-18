@@ -1,31 +1,23 @@
 import dotenv from "dotenv";
 dotenv.config();
+import Groq from "groq-sdk";
+
+const client = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 const run = async () => {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=YOUR_KEY`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
+  const response = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      {
+        role: "user",
+        content: "Give me a 3-day beginner running plan",
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: "Give me a 3-day beginner running plan"
-              }
-            ]
-          }
-        ]
-      })
-    }
-  );
+    ],
+  });
 
-  const data = await response.json();
-
- console.log(process.env.GEMINI_API_KEY);
+  console.log(response.choices[0].message.content);
 };
 
 run();
