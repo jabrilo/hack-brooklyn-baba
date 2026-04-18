@@ -32,11 +32,13 @@ class ClaimResponse(BaseModel):
     response: list[dict]
     
 class AnalyzeRequest(BaseModel):
+    claim: str
     abstracts: list[dict]
 
 class AnalyzeResponse(BaseModel):
     confidence_score: int
     summary: str
+    verdict: str
     citations: list[dict]
 
 @app.get("/health")
@@ -48,13 +50,14 @@ async def post_verify_claim(health_claim: HealthClaim):
     try:
         print("Health Claim: ", health_claim.claim)
         keywords = extract_keywords(health_claim.claim)
+        print(keywords)
         pubmed_ids = search_pubmed(keywords)
         pubmed_data = []
 
         if pubmed_ids:
             pubmed_data = fetch_abstracts(pubmed_ids)
 
-        return AnalyzeRequest(abstracts=pubmed_data)
+        return AnalyzeRequest(abstracts=pubmed_data, claim=health_claim.claim)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error verifying claim: {str(e)}")
@@ -62,10 +65,11 @@ async def post_verify_claim(health_claim: HealthClaim):
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def post_analyze_abstracts(request: AnalyzeRequest):
     try:
-        result = analyze_abstracts(request.abstracts)
+        result = analyze_abstracts(request.abstracts, request.claim)
         return result
         
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"Error analyzing abstracts: {str(e)}")
         
 
