@@ -1,32 +1,33 @@
 import os
 import json
-from groq import Groq
+import anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "llama-3.1-8b-instant" # ran out of tokens. using a smaller model(it sucks)
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+MODEL = "claude-sonnet-4-6"
 
 
 def extract_keywords(claim: str) -> str:
-    """Extract medical/health terms from claim for PubMed search"""
-    response = client.chat.completions.create(
+    response = client.messages.create(
         model=MODEL,
+        max_tokens=100,
         messages=[{
             "role": "user",
             "content": f"Extract 2-4 PubMed search terms from this health claim. Rules: no parentheses, connect all terms with &, keep the specific subject (food, substance, demographic), pair with broad medical terms. Return ONLY the search string, nothing else:\n\n{claim}"
         }]
     )
-    return (response.choices[0].message.content or "").strip()
+    return response.content[0].text.strip()
 
 
 def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
     abstracts_text = "\n\n".join(
         [f"Abstract: {a['abstract']}\nURL: {a['url']}" for a in abstracts]
     )
-    response = client.chat.completions.create(
+    response = client.messages.create(
         model=MODEL,
+        max_tokens=1000,
         messages=[{
             "role": "user",
             "content": f"""You are a health research analyst explaining findings to someone with basic biology knowledge.
@@ -51,9 +52,9 @@ def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
                - Write 3-5 sentences minimum
                - Tone: clear, informative, like a knowledgeable friend explaining something — not too casual, not too clinical
             3. The most relevant citations with their URLs
-            
             4. A verdict: either "True", "False", or "Uncertain" followed by a one sentence explanation based on the confidence score and the evidence found.
-                Respond ONLY in this JSON format:
+
+            Respond ONLY in this JSON format:
             {{
                 "confidence_score": <number>,
                 "summary": "<text>",
@@ -68,8 +69,7 @@ def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
             """
         }]
     )
-    raw = (response.choices[0].message.content or "").strip()
-    print(raw)
+    raw = response.content[0].text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     raw = raw[raw.index("{"):raw.rindex("}")+1]
     return json.loads(raw)

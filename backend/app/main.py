@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 
 from services.pubmed import search_pubmed, fetch_abstracts
-from services.groq_service import extract_keywords, analyze_abstracts
+from services.anthropic_service import extract_keywords, analyze_abstracts
 
 
 load_dotenv()
@@ -48,9 +48,7 @@ async def health_check():
 @app.post("/verify", response_model=AnalyzeRequest)
 async def post_verify_claim(health_claim: HealthClaim):
     try:
-        print("Health Claim: ", health_claim.claim)
         keywords = extract_keywords(health_claim.claim)
-        print(keywords)
         pubmed_ids = search_pubmed(keywords)
         pubmed_data = []
 
