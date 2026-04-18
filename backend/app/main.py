@@ -24,6 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pydantic model for incoming health claims
 class HealthClaim(BaseModel):
     claim: str
 
