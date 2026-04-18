@@ -1,12 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os
+import os 
 from dotenv import load_dotenv
 
 from services.pubmed import search_pubmed, fetch_abstracts
-#from services.researcher import search_health_trends
-#from services.expert import analyze_claim
+from services.groq_service import extract_keywords, analyze_abstracts
+
 
 load_dotenv()
 
@@ -30,25 +30,44 @@ class HealthClaim(BaseModel):
 
 class ClaimResponse(BaseModel):
     response: list[dict]
+    
+class AnalyzeRequest(BaseModel):
+    abstracts: list[dict]
+
+class AnalyzeResponse(BaseModel):
+    confidence_score: int
+    summary: str
+    citations: list[dict]
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "message": "Health Claim Verification API is running"}
 
-@app.post("/verify", response_model=ClaimResponse)
-async def verify_claim(health_claim: HealthClaim):
+@app.post("/verify", response_model=AnalyzeRequest)
+async def post_verify_claim(health_claim: HealthClaim):
     try:
-        claim = health_claim.claim
-        pubmed_ids = search_pubmed(claim)
+        print("Health Claim: ", health_claim.claim)
+        keywords = extract_keywords(health_claim.claim)
+        pubmed_ids = search_pubmed(keywords)
         pubmed_data = []
 
         if pubmed_ids:
             pubmed_data = fetch_abstracts(pubmed_ids)
 
-        return ClaimResponse(response=pubmed_data)
+        return AnalyzeRequest(abstracts=pubmed_data)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error verifying claim: {str(e)}")
+    
+@app.post("/analyze", response_model=AnalyzeResponse)
+async def post_analyze_abstracts(request: AnalyzeRequest):
+    try:
+        result = analyze_abstracts(request.abstracts)
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing abstracts: {str(e)}")
+        
 
 @app.get("/")
 async def root():

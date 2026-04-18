@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(backend/**)",
+      "Read(frontend/**)",
+      "Edit(frontend/**)",
+      "Bash(cd frontend && npm install)",
+      "Bash(cd frontend && npm run dev)",
+      "Bash(cd frontend && npm run build)",
+      "Bash(cd frontend && npm run lint)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ],
+    "deny": [
+      "Edit(backend/**)"
+    ]
+  }
+}
