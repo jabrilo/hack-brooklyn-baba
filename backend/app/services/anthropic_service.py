@@ -49,10 +49,12 @@ def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
                - If the papers are not a perfect match, explain what they do tell us and why there's a gap
                - Never say "this study isn't about X" — instead explain what the study IS about and how it connects
                - Be honest about limitations without being dismissive
-               - Write 3-5 sentences minimum
+               - Write exactly 3-5 sentences. Be concise.
                - Tone: clear, informative, like a knowledgeable friend explaining something — not too casual, not too clinical
             3. The most relevant citations with their URLs
             4. A verdict: either "True", "False", or "Uncertain" followed by a one sentence explanation based on the confidence score and the evidence found.
+                - If confidence is below 20 and no abstracts support the claim, verdict should be "False" unless the claim is about something genuinely unknown to science
+                - "Uncertain" should only be used when evidence exists but is mixed or incomplete
 
             Respond ONLY in this JSON format:
             {{
