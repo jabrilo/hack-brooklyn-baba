@@ -1,5 +1,5 @@
 import { useState } from "react"
-import './style.css';
+import './App.css';
 
 function App() {
     const [claim, setClaim] = useState("")
@@ -38,6 +38,7 @@ function App() {
 
     return (
         <>
+       
         <div id="heading">
             <p id="pgtitle">Health Claim Verifier</p>
             <p id="headtxt">Enter a health claim and we'll check it against real research</p>
