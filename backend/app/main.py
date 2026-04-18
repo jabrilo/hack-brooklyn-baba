@@ -4,17 +4,9 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 
-<<<<<<< HEAD
-from schemas import ClaimRequest, ClaimResponse
-
-from services.pubmed import get_abstracts_for_claim
-
-app = FastAPI()
-=======
 from services.pubmed import search_pubmed, fetch_abstracts
 #from services.researcher import search_health_trends
 #from services.expert import analyze_claim
->>>>>>> 979ee24 (Backend Exceptions)
 
 load_dotenv()
 
@@ -33,12 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
-@app.post("/", response_model=ClaimResponse)
-async def get_claim_abstracts(claim_request: ClaimRequest):
-    response = ClaimResponse(result=get_abstracts_for_claim(claim_request.claim))
-    return response
-=======
 # Pydantic model for incoming health claims
 class HealthClaim(BaseModel):
     claim: str
@@ -130,4 +116,3 @@ async def root():
             "docs": "/docs"
         }
     }
->>>>>>> 979ee24 (Backend Exceptions)
