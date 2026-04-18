@@ -130,3 +130,7 @@ uploads/
 *.backup
 *.tmp
 *.temp
+
+# Claude code files
+CLAUDE.md
+.claude/
