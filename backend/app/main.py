@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 
 from services.pubmed import search_pubmed, fetch_abstracts
-from services.groq_service import extract_keywords, analyze_abstracts
+from services.anthropic_service import extract_keywords, analyze_abstracts
 
 
 load_dotenv()
