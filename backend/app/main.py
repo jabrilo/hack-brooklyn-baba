@@ -5,7 +5,12 @@ import time
 from dotenv import load_dotenv
 
 from services.pubmed import search_pubmed, fetch_abstracts
-from services.anthropic_service import extract_keywords, analyze_abstracts
+from services.anthropic_service import (
+    extract_keywords,
+    analyze_abstracts,
+    extract_claims_from_transcript,
+    ServiceConfigError,
+)
 
 
 load_dotenv()
@@ -18,7 +23,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,6 +44,31 @@ class AnalyzeResponse(BaseModel):
     summary: str
     verdict: str
     citations: list[dict]
+
+
+class ContentAnalysisRequest(BaseModel):
+    content: str | None = None
+    transcript: str | None = None
+    platform: str | None = None
+    video_url: str | None = None
+    max_claims: int = 3
+
+
+class ContentClaimResult(BaseModel):
+    claim: str
+    speaker_text: str
+    reason: str
+    search_focus: str
+    keywords: str
+    pubmed_results_found: int
+    analysis: AnalyzeResponse
+
+
+class ContentAnalysisResponse(BaseModel):
+    platform: str | None = None
+    video_url: str | None = None
+    notes: str
+    results: list[ContentClaimResult]
 
 @app.get("/health")
 async def health_check():
@@ -65,6 +95,8 @@ async def post_verify_claim(health_claim: HealthClaim):
 
         return AnalyzeRequest(abstracts=pubmed_data, claim=health_claim.claim)
 
+    except ServiceConfigError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -79,9 +111,81 @@ async def post_analyze_abstracts(request: AnalyzeRequest):
         print(f"analyze_abstracts: {t1-t0:.2f}s")
         return result
         
+    except ServiceConfigError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=f"Error analyzing abstracts: {str(e)}")
+
+
+@app.post("/analyze-content", response_model=ContentAnalysisResponse)
+async def post_analyze_content(request: ContentAnalysisRequest):
+    try:
+        raw_content = (request.content or request.transcript or "").strip()
+        if not raw_content:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide `content` or `transcript` to analyze.",
+            )
+
+        extracted = extract_claims_from_transcript(
+            transcript=raw_content,
+            max_claims=request.max_claims,
+            platform=request.platform,
+            video_url=request.video_url,
+        )
+
+        results: list[ContentClaimResult] = []
+
+        for item in extracted.get("claims", []):
+            claim = item.get("claim", "").strip()
+            if not claim:
+                continue
+
+            keywords = extract_keywords(claim)
+            pubmed_ids = search_pubmed(keywords)
+            abstracts = fetch_abstracts(pubmed_ids) if pubmed_ids else []
+
+            if abstracts:
+                analysis_data = analyze_abstracts(abstracts, claim)
+            else:
+                analysis_data = {
+                    "confidence_score": 0,
+                    "summary": (
+                        "No directly relevant PubMed abstracts were found for this claim, "
+                        "so there is not enough evidence here to say the statement is valid "
+                        "or not valid."
+                    ),
+                    "verdict": "Uncertain: No directly relevant PubMed abstracts were found for this claim.",
+                    "citations": [],
+                }
+
+            results.append(
+                ContentClaimResult(
+                    claim=claim,
+                    speaker_text=item.get("speaker_text", ""),
+                    reason=item.get("reason", ""),
+                    search_focus=item.get("search_focus", ""),
+                    keywords=keywords,
+                    pubmed_results_found=len(abstracts),
+                    analysis=AnalyzeResponse(**analysis_data),
+                )
+            )
+
+        return ContentAnalysisResponse(
+            platform=request.platform,
+            video_url=request.video_url,
+            notes=extracted.get("notes", ""),
+            results=results,
+        )
+
+    except HTTPException:
+        raise
+    except ServiceConfigError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=f"Error analyzing content: {str(e)}")
 
 @app.get("/")
 async def root():
@@ -90,6 +194,7 @@ async def root():
         "endpoints": {
             "health": "/health",
             "verify": "/verify (POST)",
+            "analyze_content": "/analyze-content (POST)",
             "docs": "/docs"
         }
     }

@@ -2,15 +2,47 @@ import os
 import json
 import anthropic
 from dotenv import load_dotenv
+from typing import Any
 
 load_dotenv()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = "claude-sonnet-4-6"
+MAX_TRANSCRIPT_CLAIMS = 5
+
+
+class ServiceConfigError(RuntimeError):
+    pass
+
+
+def _response_text(response: Any) -> str:
+    return "".join(
+        block.text for block in response.content if hasattr(block, "text")
+    ).strip()
+
+
+def _extract_json_object(raw_text: str) -> dict:
+    cleaned = raw_text.replace("```json", "").replace("```", "").strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+
+    if start == -1 or end == -1 or end < start:
+        raise ValueError(f"Claude response did not contain JSON: {cleaned}")
+
+    return json.loads(cleaned[start:end + 1])
+
+
+def _anthropic_client() -> anthropic.Anthropic:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ServiceConfigError(
+            "ANTHROPIC_API_KEY is missing. Add it to backend/app/.env and restart the backend."
+        )
+
+    return anthropic.Anthropic(api_key=api_key)
 
 
 def extract_keywords(claim: str) -> str:
-    response = client.messages.create(
+    response = _anthropic_client().messages.create(
         model=MODEL,
         max_tokens=100,
         messages=[{
@@ -21,11 +53,83 @@ def extract_keywords(claim: str) -> str:
     return response.content[0].text.strip()
 
 
+def extract_claims_from_transcript(
+    transcript: str,
+    max_claims: int = 3,
+    platform: str | None = None,
+    video_url: str | None = None,
+) -> dict:
+    capped_max_claims = max(1, min(max_claims, MAX_TRANSCRIPT_CLAIMS))
+    response = _anthropic_client().messages.create(
+        model=MODEL,
+        max_tokens=1200,
+        temperature=0,
+        messages=[{
+            "role": "user",
+            "content": f"""You are helping a health fact-checking app analyze short-form videos and text posts.
+
+Your task is to convert a transcript or post into a short list of clean, checkable health claims.
+
+Follow these steps:
+1. Read the content closely.
+2. Ignore filler, jokes, hooks, storytelling, self-promotion, and calls to action.
+3. Find statements that make factual claims about health, nutrition, medicine, disease, prevention, treatment, supplements, hormones, or body function.
+4. Keep only claims that can realistically be checked with medical or public health evidence.
+5. Rewrite each claim as a clear standalone sentence.
+6. Keep the strongest {capped_max_claims} claims at most.
+7. Do not invent details that are missing from the original content.
+
+Rules:
+- Skip opinions and vague wellness language that cannot be tested.
+- Skip claims that are just personal experience unless they imply a broader factual claim.
+- Keep speaker_text short and close to the original wording.
+- Merge duplicates.
+
+Return ONLY valid JSON in this format:
+{{
+  "claims": [
+    {{
+      "claim": "<clean standalone claim>",
+      "speaker_text": "<short supporting quote>",
+      "reason": "<why this claim should be checked>",
+      "search_focus": "<short research direction>"
+    }}
+  ],
+  "notes": "<brief note about ambiguity, missing context, or why no claims were found>"
+}}
+
+If there are no checkable claims, return:
+{{
+  "claims": [],
+  "notes": "No checkable health claims found."
+}}
+
+Platform: {platform or "unknown"}
+Video URL: {video_url or "not provided"}
+
+Content:
+{transcript}"""
+        }]
+    )
+    return _extract_json_object(_response_text(response))
+
+
 def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
+    if not abstracts:
+        return {
+            "confidence_score": 0,
+            "summary": (
+                "No directly relevant PubMed abstracts were found for this claim, so "
+                "there is not enough evidence here to say the statement is valid or not valid."
+            ),
+            "verdict": "Uncertain: No directly relevant PubMed abstracts were found for this claim.",
+            "citations": [],
+        }
+
     abstracts_text = "\n\n".join(
         [f"Abstract: {a['abstract']}\nURL: {a['url']}" for a in abstracts]
     )
-    response = client.messages.create(
+    response = _anthropic_client().messages.create(
         model=MODEL,
         max_tokens=1000,
         messages=[{
