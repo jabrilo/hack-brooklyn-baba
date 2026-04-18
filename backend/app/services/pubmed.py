@@ -14,7 +14,11 @@ def search_pubmed(claim: str) -> list:
         return r.json()["esearchresult"]["idlist"]
     raise Exception("something went wrong")
 
+<<<<<<< HEAD
 def fetch_abstracts(ids: list) -> list[dict]:
+=======
+def fetch_abstracts(ids: list) -> list:
+>>>>>>> 979ee24 (Backend Exceptions)
     res = []
     for id in ids:
         params = {"db": "pubmed", "id": id, "rettype": "abstract", "retmode": "text", "api_key": PUB_MED_API_KEY}
@@ -24,7 +28,10 @@ def fetch_abstracts(ids: list) -> list[dict]:
         else:
             raise Exception({"Status Code": r.status_code}, "Fetch Abstract Failed")
     return res
+<<<<<<< HEAD
     
 def get_abstracts_for_claim(claim: str) -> list:
     ids = search_pubmed(claim)
     return fetch_abstracts(ids)
+=======
+>>>>>>> 979ee24 (Backend Exceptions)
