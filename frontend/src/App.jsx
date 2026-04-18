@@ -1,40 +1,77 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import './style.css';
 
 function App() {
-    const [data, setData] = useState(null)
-    const [loading, setLoading] = useState(true)
+    const [claim, setClaim] = useState("")
+    const [messages, setMessages] = useState([])
+    const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await fetch(`${import.meta.env.VITE_BASE_API_URL}/`)
-                const payload = await res.json()
-                setData(payload)
+    const sendMessage = async () => {
+        if (!claim.trim()) return
+        setLoading(true)
+        setError(null)
 
-            } catch (err){
-                setError(err.message)
-            } finally {
-                setLoading(false)
-            }
+        try {
+            const verifyRes = await fetch(`${import.meta.env.VITE_BASE_API_URL}/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ claim })
+            })
+            const verifyData = await verifyRes.json()
+            console.log(verifyData);
+            const analyzeRes = await fetch(`${import.meta.env.VITE_BASE_API_URL}/analyze`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ abstracts: verifyData.abstracts, claim: claim})
+            })
+            const analyzeData = await analyzeRes.json()
+
+            setMessages(prev => [...prev, { claim, result: analyzeData }])
+            setClaim("")
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(false)
         }
-        fetchData()
-    }, [])
-
-    if (loading) return <p>Loading...</p>
-    if (error) return <p>Error: {error}</p>
+    }
 
     return (
         <>
-            <div class="chat-container">
-
-                <div id="chat-box" class="chat-box"></div>
-
-                <div class="chat-input-area">
-                    <input id="input" type="text" placeholder="Type a message..." />
-                    <button onclick="sendMessage()">Send</button>
-                </div>
+        <div id="heading">
+            <p id="pgtitle">Health Claim Verifier</p>
+            <p id="headtxt">Enter a health claim and we'll check it against real research</p>
+        </div>
+        <div className="chat-container">
+            <div id="chat-box" className="chat-box">
+                {messages.map((msg, i) => (
+                    <div key={i} className="message">
+                        <p><strong>Claim:</strong> {msg.claim}</p>
+                        <p><strong>Verdict:</strong> {msg.result.verdict}</p>
+                        <p><strong>Confidence:</strong> {msg.result.confidence_score}/100</p>
+                        <p><strong>Summary:</strong> {msg.result.summary}</p>
+                        <ul>
+                            {msg.result.citations.map((c, j) => (
+                                <li key={j}><a href={c.url} target="_blank" rel="noreferrer">{c.title}</a></li>
+                            ))}
+                        </ul>
+                    </div>
+                ))}
+                {loading && <p>Analyzing...</p>}
+                {error && <p>Error: {error}</p>}
             </div>
+
+            <div className="chat-input-area">
+                <input
+                    type="text"
+                    value={claim}
+                    onChange={(e) => setClaim(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                    placeholder="Enter a health claim..."
+                />
+                <button onClick={sendMessage} disabled={loading}>Send</button>
+            </div>
+        </div>
         </>
     )
 }
