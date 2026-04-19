@@ -99,6 +99,13 @@ body {
     margin-top: 4px;
 }
 
+.verdict-explanation {
+    font-size: 16px;
+    color: #17358e;
+    font-weight: 700;
+    margin-top: 8px;
+}
+
 /* ─── Badge ─────────────────────────────────────────── */
 .badge {
     padding: 5px 14px;

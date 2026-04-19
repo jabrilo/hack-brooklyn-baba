@@ -88,6 +88,7 @@ function ResultCard({ msg }) {
                 <ResearchSupportBar score={msg.result.research_support} />
             </div>
             <p className="result-summary">{msg.result.summary}</p>
+            <p className="verdict-explanation">{msg.result.verdict_explanation}</p>
             {msg.result.citations?.length > 0 && (
                 <div className="citations">
                     <p className="cit-label">Sources</p>
