@@ -2,9 +2,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    background-color: #c8d8f8;
+    background-color: #e9f0e9;
     font-family: 'Segoe UI', system-ui, sans-serif;
-    color: #1a1a2e;
+    color: #260f26;
     min-height: 100vh;
 }
 
@@ -37,19 +37,21 @@ body {
     font-size: 52px;
     margin-bottom: 12px;
     display: block;
+    color: transparent;
+    text-shadow: 0 0 0 #3a6e43; 
 }
 
 .hero-title {
     font-size: clamp(28px, 5vw, 46px);
     font-weight: 700;
-    color: #000290;
+    color: #376f41;
     letter-spacing: -0.5px;
     margin-bottom: 10px;
 }
 
 .hero-sub {
     font-size: 16px;
-    color: #6d7898;
+    color: #3b5c41;
     max-width: 440px;
     margin: 0 auto;
     line-height: 1.5;
@@ -101,7 +103,7 @@ body {
 
 .verdict-explanation {
     font-size: 16px;
-    color: #17358e;
+    color: #060521;
     font-weight: 700;
     margin-top: 8px;
 }
@@ -189,7 +191,7 @@ body {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #3866ca;
+    background: #060521;
     animation: bounce 1.2s ease-in-out infinite;
 }
 .loader-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -197,7 +199,7 @@ body {
 
 .loader-word {
     font-size: 17px;
-    color: #3866ca;
+    color: #060521;
     font-weight: 500;
     transition: opacity 0.35s ease, transform 0.35s ease;
     min-height: 26px;
@@ -229,12 +231,12 @@ body {
     padding: 10px 10px 10px 24px;
     background: white;
     border-radius: 28px;
-    box-shadow: 0 4px 20px rgba(56, 102, 202, 0.13);
-    border: 1.5px solid #d6e0ff;
+    box-shadow: 0 4px 20px rgba(56, 202, 102, 0.13);
+    border: 1.5px solid #d6ffdd;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 .input-bar:focus-within {
-    border-color: #3866ca;
+    border-color: #58ca38;
     box-shadow: 0 4px 24px rgba(56, 102, 202, 0.2);
 }
 
@@ -252,7 +254,7 @@ body {
 .input-bar button {
     width: 38px;
     height: 38px;
-    background: #3866ca;
+    background: #251f47;
     color: white;
     border: none;
     border-radius: 50%;
@@ -316,7 +318,7 @@ body {
 .speak-btn {
     position: absolute;
     top: 16px;
-    right: 90px;
+    right: 100px;
     padding: 7px 12px;
     border-radius: 20px;
     border: 1.5px solid #e3eaff;

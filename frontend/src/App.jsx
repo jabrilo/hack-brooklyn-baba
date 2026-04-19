@@ -200,7 +200,7 @@ function App() {
             {!hasContent && (
                 <div className="hero">
                     <div className="hero-icon">🩺</div>
-                    <h1 className="hero-title">Health Claim Verifier</h1>
+                    <h1 className="hero-title">MythMD</h1>
                     <p className="hero-sub">Enter a health claim and we'll check it against real research</p>
                 </div>
             )}
