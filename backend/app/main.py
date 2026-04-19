@@ -1,5 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+from fastapi.responses import StreamingResponse
+
+import asyncio
+import json
+
 from pydantic import BaseModel
 import time
 from dotenv import load_dotenv
@@ -12,7 +18,7 @@ load_dotenv()
 
 app = FastAPI(
     title="Health Claim Verification API",
-    description="AI-powered health claim fact-checker using PubMed, Tavily, and OpenAI",
+    description="AI-powered health claim fact-checker using PubMed, and Anthropic",
     version="1.0.0"
 )
 
@@ -35,10 +41,22 @@ class AnalyzeRequest(BaseModel):
     abstracts: list[dict]
 
 class AnalyzeResponse(BaseModel):
-    confidence_score: int
+    research_support: int
     summary: str
     verdict: str
+    verdict_explanation: str
     citations: list[dict]
+    
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to Health Claim Verification API",
+        "endpoints": {
+            "health": "/health",
+            "verify": "/verify (POST)",
+            "docs": "/docs"
+        }
+    }
 
 @app.get("/health")
 async def health_check():
@@ -83,13 +101,58 @@ async def post_analyze_abstracts(request: AnalyzeRequest):
         print(e)
         raise HTTPException(status_code=500, detail=f"Error analyzing abstracts: {str(e)}")
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Welcome to Health Claim Verification API",
-        "endpoints": {
-            "health": "/health",
-            "verify": "/verify (POST)",
-            "docs": "/docs"
+def sse(payload: dict) -> str:
+    """Format a dict as a Server-Sent Event line."""
+    return f"data: {json.dumps(payload)}\n\n"
+ 
+ 
+async def stream_pipeline(claim: str):
+    """
+    Async generator that runs the full verification pipeline and yields
+    SSE events at each step. Existing sync service functions are offloaded
+    to a thread so they don't block the event loop.
+    """
+    try:
+        # Step 1 — extract keywords
+        yield sse({"event": "extracting", "message": "Extracting keywords..."})
+        keywords = await asyncio.to_thread(extract_keywords, claim)
+ 
+        # Step 2 — search PubMed
+        yield sse({"event": "searching", "message": "Searching PubMed..."})
+        pubmed_ids = await asyncio.to_thread(search_pubmed, keywords)
+ 
+        # Step 3 — fetch abstracts
+        pubmed_data = []
+        if pubmed_ids:
+            yield sse({"event": "fetching", "message": f"Fetching {len(pubmed_ids)} studies..."})
+            pubmed_data = await asyncio.to_thread(fetch_abstracts, pubmed_ids)
+ 
+        count = len(pubmed_data)
+        if count == 0:
+            yield sse({"event": "found", "message": "No studies found — analyzing with general knowledge..."})
+        else:
+            yield sse({"event": "found", "message": f"Found {count} relevant {'study' if count == 1 else 'studies'}..."})
+ 
+        # Step 4 — Claude analysis
+        yield sse({"event": "analyzing", "message": "Analyzing evidence with Claude..."})
+        result = await asyncio.to_thread(analyze_abstracts, pubmed_data, claim)
+ 
+        # Step 5 — done
+        yield sse({"event": "complete", "result": result})
+ 
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        yield sse({"event": "error", "message": str(e)})
+ 
+  
+@app.post("/stream")
+async def stream_claim(health_claim: HealthClaim):
+    return StreamingResponse(
+        stream_pipeline(health_claim.claim),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disables nginx buffering if behind a proxy
         }
-    }
+    )
