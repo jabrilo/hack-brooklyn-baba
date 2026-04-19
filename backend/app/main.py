@@ -13,8 +13,15 @@ from dotenv import load_dotenv
 from services.pubmed import search_pubmed, fetch_abstracts
 from services.anthropic_service import extract_keywords, analyze_abstracts
 
+from elevenlabs.client import ElevenLabs
+import os
+
 
 load_dotenv()
+
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+VOICE_ID = "7EzWGsX10sAS4c9m9cPf"
+
 
 app = FastAPI(
     title="Health Claim Verification API",
@@ -46,6 +53,9 @@ class AnalyzeResponse(BaseModel):
     verdict: str
     verdict_explanation: str
     citations: list[dict]
+    
+class SpeakRequest(BaseModel):
+    text: str
     
 @app.get("/")
 async def root():
@@ -155,4 +165,22 @@ async def stream_claim(health_claim: HealthClaim):
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",   # disables nginx buffering if behind a proxy
         }
+    )
+    
+@app.post("/speak")
+async def speak(request: SpeakRequest):
+    def generate_audio():
+        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+        audio = client.text_to_speech.convert(
+            voice_id=VOICE_ID,
+            text=request.text,
+            model_id="eleven_turbo_v2",
+        )
+        for chunk in audio:
+            yield chunk
+            
+    return StreamingResponse(
+        generate_audio(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"}
     )

@@ -36,6 +36,38 @@ function ResearchSupportBar({ score }) {
 
 function ResultCard({ msg }) {
     const [copyText, setCopyText] = useState("Copy");
+    const audioRef = useRef(null)
+    const [isPlaying, setIsPlaying] = useState(false)
+
+    async function playAudio() {
+        if (audioRef.current) {
+            audioRef.current.pause()
+            audioRef.current = null
+            setIsPlaying(false)
+            return
+        }
+        setIsPlaying(true)
+        try {
+            const res = await fetch(`${import.meta.env.VITE_BASE_API_URL}/speak`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: msg.result.summary })
+            })
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            const audio = new Audio(url)
+            audioRef.current = audio
+            audio.onended = () => {
+                setIsPlaying(false)
+                audioRef.current = null
+            }
+            audio.play()
+        }
+        catch {
+            setIsPlaying(false)
+            audioRef.current = null
+        }
+    }
 
     function copyToClipboard() {
         setCopyText("Copied!")
@@ -74,7 +106,15 @@ function ResultCard({ msg }) {
                 title="Copy to clipboard"
             >
                 {copyText}
-            </button>        
+            </button>
+            <button
+                className={`speak-btn ${isPlaying ? "speaking" : ""}`}
+                onClick={playAudio}
+                disabled={isPlaying}
+                title="Read summary aloud"
+            >
+                {isPlaying ? "🔊" : "🔈"}
+            </button>     
         </div>
     )
 }
