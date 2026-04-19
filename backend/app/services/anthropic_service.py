@@ -35,15 +35,16 @@ def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
             The user's claim is: "{claim}"
 
             Based on these PubMed abstracts, provide:
-            1. A confidence score (0-100) that answers ONLY this question: do these abstracts directly answer the claim?
-               - 0-20: abstracts are completely unrelated to the claim
-               - 21-40: abstracts are only tangentially related (e.g. same general topic but different question)
-               - 41-60: abstracts are somewhat related but don't directly test or address the claim
-               - 61-80: abstracts are related and partially support or refute the claim but have gaps
-               - 81-95: abstracts directly and specifically address the claim with clear evidence
-               - 96-100: ONLY if abstracts provide overwhelming, direct, causal evidence for the exact claim
-               - IMPORTANT: penalize heavily if the abstracts address a related but different question (e.g. claim is about prevention but papers are about treatment, or claim is about coffee but papers are about caffeine)
-               - IMPORTANT: do not hesitate to use the full range. A claim like "smoking causes lung cancer" with papers directly about smoking and lung cancer should score 90+. A claim like "eating rocks strengthens teeth" with no relevant papers should score 0-10.
+            1. A Research Support score (0-100) representing how strongly the evidence supports the claim being true:
+                - 0-20:  evidence directly contradicts the claim, or no relevant papers were found
+                - 21-40: evidence leans against the claim, or papers only address a tangentially related question
+                - 41-60: evidence is mixed, inconclusive, or tests a related but meaningfully different question
+                - 61-80: evidence supports the claim but is indirect, has notable gaps, or lacks causal proof
+                - 81-95: multiple studies directly and consistently support the claim with clear evidence
+                - 96-100: multiple studies provide strong, direct, causal proof of the exact claim
+                            (e.g. smoking → lung cancer with mechanistic + epidemiological evidence across studies = 95+)
+                - Do not hesitate to use the full range in both directions.
+                - Penalize if papers address a related but different question (e.g. claim is about prevention, papers are about treatment).
             2. A plain-language summary written at a high school biology level. Rules:
                - Explain what the research actually found and how it relates to the claim
                - If the papers are not a perfect match, explain what they do tell us and why there's a gap
@@ -52,18 +53,18 @@ def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
                - Write exactly 3-5 sentences. Be concise.
                - Tone: clear, informative, like a knowledgeable friend explaining something — not too casual, not too clinical
             3. The most relevant citations with their URLs
-            4. A verdict: either "True", "False", or "Uncertain" followed by a one sentence explanation based on the confidence score and the evidence found.
-                - If confidence is below 20 and no abstracts support the claim, verdict should be "False" unless the claim is about something genuinely unknown to science
-                - "Uncertain" should only be used when evidence exists but is mixed or incomplete
+            4. A verdict of "True", "False", or "Uncertain" in a separate field, plus a one-sentence explanation:
+                - "True"      → Research Support 75+, evidence consistently supports the claim
+                - "False"     → Research Support below 40 AND papers actively contradict the claim
+                - "Uncertain" → everything else: mixed evidence, indirect support, or insufficient data
 
             Respond ONLY in this JSON format:
             {{
-                "confidence_score": <number>,
+                "research_support": <number>,
                 "summary": "<text>",
-                "verdict": "<True/False/Uncertain>: <one sentence explanation>",
-                "citations": [
-                    {{"url": "<pubmed_url>", "title": "<brief title or finding>"}}
-                ]
+                "verdict": "<True/False/Uncertain>",
+                "verdict_explanation": "<one sentence>",
+                "citations": [...]
             }}
 
             Abstracts:
