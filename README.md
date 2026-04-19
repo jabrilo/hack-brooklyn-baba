@@ -7,8 +7,8 @@ MythMD is an AI-powered health claim fact-checker that verifies claims against r
 
 ## Stack
 
-- **Frontend**: React + Vite (port 5173)
-- **Backend**: FastAPI (port 8000)
+- **Frontend**: React + Vite
+- **Backend**: FastAPI
 - **AI**: Anthropic Claude (claude-sonnet-4-6)
 - **Research**: PubMed API (NCBI)
 - **Text-to-Speech**: ElevenLabs
