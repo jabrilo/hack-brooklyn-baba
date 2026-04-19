@@ -11,6 +11,7 @@ from services.anthropic_service import (
     extract_claims_from_transcript,
     ServiceConfigError,
 )
+from services.video_transcript_service import retrieve_video_transcript
 
 
 load_dotenv()
@@ -54,6 +55,12 @@ class ContentAnalysisRequest(BaseModel):
     max_claims: int = 3
 
 
+class VideoAnalysisRequest(BaseModel):
+    video_url: str
+    platform: str | None = None
+    max_claims: int = 3
+
+
 class ContentClaimResult(BaseModel):
     claim: str
     speaker_text: str
@@ -65,10 +72,78 @@ class ContentClaimResult(BaseModel):
 
 
 class ContentAnalysisResponse(BaseModel):
+    transcript_status: str
     platform: str | None = None
     video_url: str | None = None
+    transcript: str | None = None
+    transcript_source: str | None = None
+    transcript_quality: str | None = None
     notes: str
     results: list[ContentClaimResult]
+
+
+def _empty_claim_analysis() -> dict:
+    return {
+        "confidence_score": 0,
+        "summary": (
+            "No directly relevant PubMed abstracts were found for this claim, so there is "
+            "not enough evidence here to say the statement is valid or not valid."
+        ),
+        "verdict": (
+            "Uncertain: No directly relevant PubMed abstracts were found for this claim."
+        ),
+        "citations": [],
+    }
+
+
+def _combine_notes(*parts: str | None) -> str:
+    seen: set[str] = set()
+    combined: list[str] = []
+
+    for part in parts:
+        value = (part or "").strip()
+        if not value:
+            continue
+        normalized = value.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        combined.append(value)
+
+    return " ".join(combined)
+
+
+def _build_content_results(extracted_claims: list[dict]) -> list[ContentClaimResult]:
+    results: list[ContentClaimResult] = []
+
+    for item in extracted_claims:
+        claim = item.get("claim", "").strip()
+        if not claim:
+            continue
+
+        search_focus = item.get("search_focus", "").strip()
+        keyword_seed = claim
+        if search_focus:
+            keyword_seed = f"{claim}\nResearch focus: {search_focus}"
+
+        keywords = extract_keywords(keyword_seed)
+        pubmed_ids = search_pubmed(keywords)
+        abstracts = fetch_abstracts(pubmed_ids) if pubmed_ids else []
+        analysis_data = analyze_abstracts(abstracts, claim) if abstracts else _empty_claim_analysis()
+
+        results.append(
+            ContentClaimResult(
+                claim=claim,
+                speaker_text=item.get("speaker_text", ""),
+                reason=item.get("reason", ""),
+                search_focus=search_focus,
+                keywords=keywords,
+                pubmed_results_found=len(abstracts),
+                analysis=AnalyzeResponse(**analysis_data),
+            )
+        )
+
+    return results
 
 @app.get("/health")
 async def health_check():
@@ -133,48 +208,18 @@ async def post_analyze_content(request: ContentAnalysisRequest):
             max_claims=request.max_claims,
             platform=request.platform,
             video_url=request.video_url,
+            transcript_source="manual_input",
+            transcript_status="manual_input",
         )
-
-        results: list[ContentClaimResult] = []
-
-        for item in extracted.get("claims", []):
-            claim = item.get("claim", "").strip()
-            if not claim:
-                continue
-
-            keywords = extract_keywords(claim)
-            pubmed_ids = search_pubmed(keywords)
-            abstracts = fetch_abstracts(pubmed_ids) if pubmed_ids else []
-
-            if abstracts:
-                analysis_data = analyze_abstracts(abstracts, claim)
-            else:
-                analysis_data = {
-                    "confidence_score": 0,
-                    "summary": (
-                        "No directly relevant PubMed abstracts were found for this claim, "
-                        "so there is not enough evidence here to say the statement is valid "
-                        "or not valid."
-                    ),
-                    "verdict": "Uncertain: No directly relevant PubMed abstracts were found for this claim.",
-                    "citations": [],
-                }
-
-            results.append(
-                ContentClaimResult(
-                    claim=claim,
-                    speaker_text=item.get("speaker_text", ""),
-                    reason=item.get("reason", ""),
-                    search_focus=item.get("search_focus", ""),
-                    keywords=keywords,
-                    pubmed_results_found=len(abstracts),
-                    analysis=AnalyzeResponse(**analysis_data),
-                )
-            )
+        results = _build_content_results(extracted.get("claims", []))
 
         return ContentAnalysisResponse(
+            transcript_status="manual_input",
             platform=request.platform,
             video_url=request.video_url,
+            transcript=raw_content,
+            transcript_source="manual_input",
+            transcript_quality="manual_input",
             notes=extracted.get("notes", ""),
             results=results,
         )
@@ -187,6 +232,61 @@ async def post_analyze_content(request: ContentAnalysisRequest):
         print(e)
         raise HTTPException(status_code=500, detail=f"Error analyzing content: {str(e)}")
 
+
+@app.post("/analyze-video", response_model=ContentAnalysisResponse)
+async def post_analyze_video(request: VideoAnalysisRequest):
+    try:
+        normalized_url = request.video_url.strip()
+        if not normalized_url:
+            raise HTTPException(status_code=400, detail="Provide `video_url` to analyze.")
+
+        transcript_payload = retrieve_video_transcript(
+            video_url=normalized_url,
+            platform=request.platform,
+        )
+
+        if not transcript_payload.transcript:
+            return ContentAnalysisResponse(
+                transcript_status=transcript_payload.status,
+                platform=transcript_payload.platform,
+                video_url=normalized_url,
+                transcript=None,
+                transcript_source=transcript_payload.transcript_source,
+                transcript_quality=transcript_payload.transcript_quality,
+                notes=transcript_payload.notes,
+                results=[],
+            )
+
+        extracted = extract_claims_from_transcript(
+            transcript=transcript_payload.transcript,
+            max_claims=request.max_claims,
+            platform=transcript_payload.platform,
+            video_url=normalized_url,
+            transcript_source=transcript_payload.transcript_source,
+            transcript_status=transcript_payload.status,
+        )
+        results = _build_content_results(extracted.get("claims", []))
+
+        return ContentAnalysisResponse(
+            transcript_status=transcript_payload.status,
+            platform=transcript_payload.platform,
+            video_url=normalized_url,
+            transcript=transcript_payload.transcript,
+            transcript_source=transcript_payload.transcript_source,
+            transcript_quality=transcript_payload.transcript_quality,
+            notes=_combine_notes(transcript_payload.notes, extracted.get("notes", "")),
+            results=results,
+        )
+
+    except HTTPException:
+        raise
+    except ServiceConfigError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=f"Error analyzing video: {str(e)}")
+
+
 @app.get("/")
 async def root():
     return {
@@ -194,7 +294,9 @@ async def root():
         "endpoints": {
             "health": "/health",
             "verify": "/verify (POST)",
+            "analyze": "/analyze (POST)",
             "analyze_content": "/analyze-content (POST)",
+            "analyze_video": "/analyze-video (POST)",
             "docs": "/docs"
         }
     }

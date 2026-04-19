@@ -7,7 +7,7 @@ from typing import Any
 load_dotenv()
 
 MODEL = "claude-sonnet-4-6"
-MAX_TRANSCRIPT_CLAIMS = 5
+MAX_TRANSCRIPT_CLAIMS = 3
 
 
 class ServiceConfigError(RuntimeError):
@@ -44,13 +44,32 @@ def _anthropic_client() -> anthropic.Anthropic:
 def extract_keywords(claim: str) -> str:
     response = _anthropic_client().messages.create(
         model=MODEL,
-        max_tokens=100,
+        max_tokens=150,
+        temperature=0,
         messages=[{
             "role": "user",
-            "content": f"Extract 2-4 PubMed search terms from this health claim. Rules: no parentheses, connect all terms with &, keep the specific subject (food, substance, demographic), pair with broad medical terms. Return ONLY the search string, nothing else:\n\n{claim}"
+            "content": f"""You are writing a compact PubMed query for a health-claim fact checker.
+
+Claim or research focus:
+{claim}
+
+Rules:
+- Keep the subject specific.
+- Prefer 2 to 4 terms total.
+- Include the medical outcome or condition.
+- Use plain PubMed-friendly words only.
+- Do not use parentheses or quotation marks.
+- Connect terms with ` & `.
+- Return ONLY valid JSON.
+
+JSON format:
+{{
+  "keywords": "<term 1 & term 2 & term 3>"
+}}"""
         }]
     )
-    return response.content[0].text.strip()
+    payload = _extract_json_object(_response_text(response))
+    return payload["keywords"].strip()
 
 
 def extract_claims_from_transcript(
@@ -58,34 +77,55 @@ def extract_claims_from_transcript(
     max_claims: int = 3,
     platform: str | None = None,
     video_url: str | None = None,
+    transcript_source: str | None = None,
+    transcript_status: str | None = None,
 ) -> dict:
     capped_max_claims = max(1, min(max_claims, MAX_TRANSCRIPT_CLAIMS))
+    metadata_warning = ""
+    if transcript_source == "metadata_only":
+        metadata_warning = (
+            "- This text comes from public video text like the title, description, or page metadata.\n"
+            "- Do not infer spoken words that are not explicitly present in the text.\n"
+        )
+
     response = _anthropic_client().messages.create(
         model=MODEL,
         max_tokens=1200,
         temperature=0,
         messages=[{
             "role": "user",
-            "content": f"""You are helping a health fact-checking app analyze short-form videos and text posts.
+            "content": f"""You are helping a health fact-checking app analyze social-media videos and posts.
 
-Your task is to convert a transcript or post into a short list of clean, checkable health claims.
+Treat the provided text as evidence about what the creator posted, not as medical truth.
 
-Follow these steps:
+Your task is to extract the strongest checkable health claims.
+
+Instructions:
 1. Read the content closely.
-2. Ignore filler, jokes, hooks, storytelling, self-promotion, and calls to action.
-3. Find statements that make factual claims about health, nutrition, medicine, disease, prevention, treatment, supplements, hormones, or body function.
-4. Keep only claims that can realistically be checked with medical or public health evidence.
-5. Rewrite each claim as a clear standalone sentence.
-6. Keep the strongest {capped_max_claims} claims at most.
-7. Do not invent details that are missing from the original content.
+2. Ignore filler, jokes, hooks, storytelling, sponsorships, self-promotion, and calls to action.
+3. Extract only factual claims about health, medicine, nutrition, supplements, disease, prevention, treatment, hormones, or body function.
+4. Prefer 1 to {capped_max_claims} strong claims over a larger number of weak ones.
+5. Keep only claims that can realistically be checked against medical or public health research.
+6. Rewrite each claim as a clean standalone sentence without changing its meaning.
+7. Do not invent details that are missing.
+8. Keep claims in the same order they appear in the source when possible.
 
 Rules:
-- Skip opinions and vague wellness language that cannot be tested.
-- Skip claims that are just personal experience unless they imply a broader factual claim.
-- Keep speaker_text short and close to the original wording.
-- Merge duplicates.
+- Skip vague wellness language that cannot be tested.
+- Skip pure opinions.
+- Skip personal anecdotes unless they imply a broader factual claim.
+- Keep `speaker_text` close to the source wording.
+- Use `reason` to explain why the claim is checkable.
+- Use `search_focus` to describe the core PubMed question to investigate.
+- Merge duplicates or near-duplicates.
+- Treat transcript text only as evidence of what was said or posted.
+- Do not fill in missing context or missing words.
+- Return ONLY valid JSON.
 
-Return ONLY valid JSON in this format:
+Special handling:
+{metadata_warning if metadata_warning else "- Rely only on the provided words and do not fill in missing details."}
+
+JSON format:
 {{
   "claims": [
     {{
@@ -106,6 +146,8 @@ If there are no checkable claims, return:
 
 Platform: {platform or "unknown"}
 Video URL: {video_url or "not provided"}
+Transcript source: {transcript_source or "unknown"}
+Transcript status: {transcript_status or "unknown"}
 
 Content:
 {transcript}"""
@@ -132,50 +174,49 @@ def analyze_abstracts(abstracts: list[dict], claim: str) -> dict:
     response = _anthropic_client().messages.create(
         model=MODEL,
         max_tokens=1000,
+        temperature=0,
         messages=[{
             "role": "user",
-            "content": f"""You are a health research analyst explaining findings to someone with basic biology knowledge.
+            "content": f"""You are a health research analyst reviewing a checkable claim that came from a social-media transcript.
 
-            The user's claim is: "{claim}"
+Claim:
+"{claim}"
 
-            Based on these PubMed abstracts, provide:
-            1. A confidence score (0-100) that answers ONLY this question: do these abstracts directly answer the claim?
-               - 0-20: abstracts are completely unrelated to the claim
-               - 21-40: abstracts are only tangentially related (e.g. same general topic but different question)
-               - 41-60: abstracts are somewhat related but don't directly test or address the claim
-               - 61-80: abstracts are related and partially support or refute the claim but have gaps
-               - 81-95: abstracts directly and specifically address the claim with clear evidence
-               - 96-100: ONLY if abstracts provide overwhelming, direct, causal evidence for the exact claim
-               - IMPORTANT: penalize heavily if the abstracts address a related but different question (e.g. claim is about prevention but papers are about treatment, or claim is about coffee but papers are about caffeine)
-               - IMPORTANT: do not hesitate to use the full range. A claim like "smoking causes lung cancer" with papers directly about smoking and lung cancer should score 90+. A claim like "eating rocks strengthens teeth" with no relevant papers should score 0-10.
-            2. A plain-language summary written at a high school biology level. Rules:
-               - Explain what the research actually found and how it relates to the claim
-               - If the papers are not a perfect match, explain what they do tell us and why there's a gap
-               - Never say "this study isn't about X" — instead explain what the study IS about and how it connects
-               - Be honest about limitations without being dismissive
-               - Write exactly 3-5 sentences. Be concise.
-               - Tone: clear, informative, like a knowledgeable friend explaining something — not too casual, not too clinical
-            3. The most relevant citations with their URLs
-            4. A verdict: either "True", "False", or "Uncertain" followed by a one sentence explanation based on the confidence score and the evidence found.
-                - If confidence is below 20 and no abstracts support the claim, verdict should be "False" unless the claim is about something genuinely unknown to science
-                - "Uncertain" should only be used when evidence exists but is mixed or incomplete
+Use only the PubMed abstracts below.
 
-            Respond ONLY in this JSON format:
-            {{
-                "confidence_score": <number>,
-                "summary": "<text>",
-                "verdict": "<True/False/Uncertain>: <one sentence explanation>",
-                "citations": [
-                    {{"url": "<pubmed_url>", "title": "<brief title or finding>"}}
-                ]
-            }}
+Your job:
+1. Score how directly the abstracts address the claim on a 0-100 scale.
+   - 0-20: unrelated or effectively no evidence for this exact claim
+   - 21-40: same broad topic, but not the same question
+   - 41-60: partly relevant, but indirect or incomplete
+   - 61-80: fairly relevant evidence with meaningful gaps
+   - 81-95: directly relevant evidence that strongly addresses the claim
+   - 96-100: overwhelming direct evidence for the exact claim
+2. Write a concise 3-5 sentence summary at a high school biology level.
+3. Return the most relevant PubMed citations.
+4. Give a verdict in the format `True: ...`, `False: ...`, or `Uncertain: ...`.
 
-            Abstracts:
-            {abstracts_text}
-            """
+Important rules:
+- Treat the claim as something said in a video, not as established truth.
+- Confidence must reflect evidence relevance and strength, not model certainty.
+- Penalize papers that are adjacent but not directly on the claim.
+- Explain what the abstracts do cover when they are imperfect matches.
+- Score this claim independently, even if other claims from the same video were weaker or stronger.
+- Do not default to the same low score across different claims unless the evidence quality is truly similar.
+- Return ONLY valid JSON.
+
+JSON format:
+{{
+  "confidence_score": <number>,
+  "summary": "<text>",
+  "verdict": "<True/False/Uncertain>: <one sentence explanation>",
+  "citations": [
+    {{"url": "<pubmed_url>", "title": "<brief title or finding>"}}
+  ]
+}}
+
+Abstracts:
+{abstracts_text}"""
         }]
     )
-    raw = response.content[0].text.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
-    raw = raw[raw.index("{"):raw.rindex("}")+1]
-    return json.loads(raw)
+    return _extract_json_object(_response_text(response))
