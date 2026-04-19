@@ -35,6 +35,19 @@ function ResearchSupportBar({ score }) {
 }
 
 function ResultCard({ msg }) {
+    const [copyText, setCopyText] = useState("Copy");
+
+    function copyToClipboard() {
+        setCopyText("Copied!")
+        const text = `Claim: ${msg.claim}\nVerdict: ${msg.result.verdict}\nResearch Supported: ${msg.result.research_support}/100\n\nSummary: ${msg.result.summary}\n\nSources:\n${msg.result.citations.map(c => `- ${c.title} (${c.url})`).join("\n")}`
+
+        navigator.clipboard.writeText(text)
+        setTimeout(() => {
+            setCopyText("Copy")
+        }, 2000)
+
+    }
+
     return (
         <div className="result-card">
             <p className="result-claim">"{msg.claim}"</p>
@@ -55,6 +68,13 @@ function ResultCard({ msg }) {
                     </ul>
                 </div>
             )}
+            <button 
+                className={`copy-btn ${copyText === "Copied!" ? "copied" : ""}`}
+                onClick={copyToClipboard}
+                title="Copy to clipboard"
+            >
+                {copyText}
+            </button>        
         </div>
     )
 }

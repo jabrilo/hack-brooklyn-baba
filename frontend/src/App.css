@@ -66,6 +66,7 @@ body {
 
 /* ─── Result card ───────────────────────────────────── */
 .result-card {
+    position: relative;
     background: white;
     border-radius: 18px;
     padding: 24px 28px;
@@ -206,10 +207,6 @@ body {
     width: 100%;
 }
 
-.input-dock.centered {
-    /* stays in flow, hero handles vertical centering */
-}
-
 .input-dock.docked {
     position: fixed;
     bottom: 24px;
@@ -257,9 +254,9 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background 0.2s, opacity 0.2s;
+    transition: background-color 0.2s, opacity 0.2s;
 }
-.input-bar button:hover:not(:disabled) { background: #2a52b0; }
+.input-bar button:hover:not(:disabled) { background-color: #2a52b0; }
 .input-bar button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-spinner {
@@ -288,6 +285,27 @@ body {
     animation: fadeUp 0.3s ease both;
 }
 
+.copy-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    padding: 7px 16px;
+    border-radius: 20px;
+    border: 1.5px solid #e3eaff;
+    background-color: white;
+    color: #6d7898;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+    border-color: #3866ca;
+    color: #3866ca;
+    background-color: #f0f4ff;
+}
+
 /* ─── Keyframes ──────────────────────────────────────── */
 @keyframes fadeUp {
     from { opacity: 0; transform: translateY(14px); }
@@ -301,4 +319,17 @@ body {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+@keyframes pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+
+.copy-btn.copied {
+    border-color: #065f46;
+    color: #065f46;
+    background-color: #d1fae5;
+    animation: pop 0.25s ease;
 }
