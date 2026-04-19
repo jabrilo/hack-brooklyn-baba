@@ -2,7 +2,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    background: #f0f4ff;
+    background-color: #c8d8f8;
     font-family: 'Segoe UI', system-ui, sans-serif;
     color: #1a1a2e;
     min-height: 100vh;
@@ -58,7 +58,7 @@ body {
 /* ─── Feed ──────────────────────────────────────────── */
 .feed {
     width: 100%;
-    max-width: 760px;
+    max-width: 900px;
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -91,7 +91,7 @@ body {
 }
 
 .result-summary {
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.65;
     color: #2c2c3e;
     border-top: 1px solid #eef1fb;
@@ -218,9 +218,9 @@ body {
     display: flex;
     align-items: center;
     width: 90%;
-    max-width: 760px;
+    max-width: 900px;
+    padding: 10px 10px 10px 24px;
     background: white;
-    padding: 8px 8px 8px 20px;
     border-radius: 28px;
     box-shadow: 0 4px 20px rgba(56, 102, 202, 0.13);
     border: 1.5px solid #d6e0ff;
@@ -306,6 +306,34 @@ body {
     background-color: #f0f4ff;
 }
 
+.speak-btn {
+    position: absolute;
+    top: 16px;
+    right: 90px;
+    padding: 7px 12px;
+    border-radius: 20px;
+    border: 1.5px solid #e3eaff;
+    background-color: white;
+    color: #6d7898;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.speak-btn:hover:not(:disabled) {
+    border-color: #3866ca;
+    color: #3866ca;
+    background-color: #f0f4ff;
+}
+
+.speak-btn.speaking {
+    border-color: #3866ca;
+    color: #3866ca;
+    background-color: #f0f4ff;
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
 /* ─── Keyframes ──────────────────────────────────────── */
 @keyframes fadeUp {
     from { opacity: 0; transform: translateY(14px); }
@@ -332,4 +360,9 @@ body {
     color: #065f46;
     background-color: #d1fae5;
     animation: pop 0.25s ease;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
 }
